@@ -11,6 +11,6 @@ import java.lang.annotation.*;
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
 @Documented
-@Qualifier(RdsApplication.BLOG)
+@Qualifier("blog")
 public @interface Blog {
 }

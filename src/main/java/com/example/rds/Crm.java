@@ -11,6 +11,6 @@ import java.lang.annotation.*;
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
 @Documented
-@Qualifier(RdsApplication.CRM)
-public @interface Player {
+@Qualifier("crm")
+public @interface Crm {
 }

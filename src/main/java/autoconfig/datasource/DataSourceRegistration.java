@@ -12,6 +12,7 @@ public class DataSourceRegistration implements BeanNameAware, BeanClassLoaderAwa
 
 		@NestedConfigurationProperty
 		private final DataSourceProperties dataSource;
+
 		private String beanName;
 
 		public DataSourceRegistration() {
