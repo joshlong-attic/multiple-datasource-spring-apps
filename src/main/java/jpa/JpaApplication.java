@@ -259,7 +259,7 @@ class JpaRegistrar implements ImportBeanDefinitionRegistrar, EnvironmentAware, R
 				// it would be nice to be able to start with crm.datasource.username, password, driver = ... and blog.datasource.username, password, driver,
 				// and arrive automatically at:
 				// auto-registered JpaRepositories, JdbcTemplate, DataSource, JpaTransactionManagers, etc.
-				
+
 				register(Order.class.getPackage(), "crmTM", "crmEMF", annotationMetadata, beanDefinitionRegistry);
 				register(Post.class.getPackage(), "blogTM", "blogEMF", annotationMetadata, beanDefinitionRegistry);
 		}
