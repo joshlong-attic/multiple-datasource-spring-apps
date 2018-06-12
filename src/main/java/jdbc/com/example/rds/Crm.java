@@ -1,4 +1,4 @@
-package com.example.rds;
+package jdbc.com.example.rds;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 

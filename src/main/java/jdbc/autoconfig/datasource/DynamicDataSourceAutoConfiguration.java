@@ -1,4 +1,4 @@
-package autoconfig.datasource;
+package jdbc.autoconfig.datasource;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.apache.commons.logging.Log;

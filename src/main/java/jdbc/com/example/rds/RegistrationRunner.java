@@ -1,4 +1,4 @@
-package com.example.rds;
+package jdbc.com.example.rds;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;

@@ -1,6 +1,6 @@
-package com.example.rds;
+package jdbc.com.example.rds;
 
-import autoconfig.datasource.DataSourceRegistration;
+import jdbc.autoconfig.datasource.DataSourceRegistration;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
