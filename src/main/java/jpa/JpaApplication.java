@@ -149,9 +149,7 @@ public class JpaApplication {
 class DynamicRepositoryConfigurationSourceSupport extends RepositoryConfigurationSourceSupport {
 
 		private final Package pkg;
-
-
-		private String transactionManagerRef, entityManagerFactoryRef;
+		private final String transactionManagerRef, entityManagerFactoryRef;
 
 		public DynamicRepositoryConfigurationSourceSupport(Environment environment,
 																																																					ClassLoader classLoader, BeanDefinitionRegistry registry, Package pkg,
