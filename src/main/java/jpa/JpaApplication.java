@@ -6,6 +6,7 @@ import jpa.blog.Post;
 import jpa.blog.PostRepository;
 import jpa.crm.Order;
 import jpa.crm.OrderRepository;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.parsing.BeanComponentDefinition;
@@ -217,6 +218,7 @@ class DynamicRepositoryConfigurationSourceSupport extends RepositoryConfiguratio
 
 class JpaRegistrar implements ImportBeanDefinitionRegistrar, EnvironmentAware, ResourceLoaderAware {
 
+		private Logger logger = LoggerFactory.getLogger(getClass());
 
 		private void register(Package pkg, String t, String e, AnnotationMetadata am, BeanDefinitionRegistry beanDefinitionRegistry) {
 
@@ -241,10 +243,9 @@ class JpaRegistrar implements ImportBeanDefinitionRegistrar, EnvironmentAware, R
 						AbstractBeanDefinition beanDefinition = definitionBuilder.getBeanDefinition();
 						String beanName = configurationSource.generateBeanName(beanDefinition);
 
-						LoggerFactory.getLogger(getClass()).debug(
-							"Spring Data {} - Registering repository: {} - Interface: {} - Factory: {}",
-							extension.getModuleName(), beanName,
-							configuration.getRepositoryInterface(), configuration.getRepositoryFactoryBeanClassName());
+						logger
+							.debug("Spring Data {} - Registering repository: {} - Interface: {} - Factory: {}",
+								extension.getModuleName(), beanName, configuration.getRepositoryInterface(), configuration.getRepositoryFactoryBeanClassName());
 
 						beanDefinition.setAttribute("factoryBeanObjectType", configuration.getRepositoryInterface());
 
@@ -255,13 +256,15 @@ class JpaRegistrar implements ImportBeanDefinitionRegistrar, EnvironmentAware, R
 
 		@Override
 		public void registerBeanDefinitions(AnnotationMetadata annotationMetadata, BeanDefinitionRegistry beanDefinitionRegistry) {
-				// todo we know that this works. how can we drive it from a @ConfigurationProperties instance?
-				// it would be nice to be able to start with crm.datasource.username, password, driver = ... and blog.datasource.username, password, driver,
-				// and arrive automatically at:
-				// auto-registered JpaRepositories, JdbcTemplate, DataSource, JpaTransactionManagers, etc.
 
-				register(Order.class.getPackage(), "crmTM", "crmEMF", annotationMetadata, beanDefinitionRegistry);
-				register(Post.class.getPackage(), "blogTM", "blogEMF", annotationMetadata, beanDefinitionRegistry);
+				// todo we know that this works. how can we drive it from a
+				// todo @ConfigurationProperties instance?
+
+				// it would be nice to be able to start with crm.datasource.username, password, driver = ... and blog.datasource.username, password, driver,
+				// and arrive automatically at: auto-registered JpaRepositories, JdbcTemplate, DataSource, JpaTransactionManagers, etc.
+
+				this.register(Order.class.getPackage(), "crmTM", "crmEMF", annotationMetadata, beanDefinitionRegistry);
+				this.register(Post.class.getPackage(), "blogTM", "blogEMF", annotationMetadata, beanDefinitionRegistry);
 		}
 
 		private Environment environment;

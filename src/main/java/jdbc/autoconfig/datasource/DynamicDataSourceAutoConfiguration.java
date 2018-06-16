@@ -37,7 +37,6 @@ import java.util.function.Supplier;
 	*
 	*/
 @Configuration
-
 @Import(DynamicDataSourceAutoConfiguration.BeanRegistrar.class)
 class DynamicDataSourceAutoConfiguration {
 

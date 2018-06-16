@@ -1,2 +1,1 @@
-org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
-  autoconfig.datasource.DynamicDataSourceAutoConfiguration
+#org.springframework.boot.autoconfigure.EnableAutoConfiguration=jdbc.autoconfig.datasource.DynamicDataSourceAutoConfiguration
