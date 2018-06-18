@@ -1,4 +1,4 @@
-package jdbc.autoconfig.datasource;
+package xdb.jpa;
 
 import lombok.Data;
 import lombok.extern.java.Log;

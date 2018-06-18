@@ -1,4 +1,4 @@
-package jpa.crm;
+package demo.crm;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 

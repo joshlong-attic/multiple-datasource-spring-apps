@@ -1,4 +1,4 @@
-package jdbc.com.example.rds;
+package demo.blog;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 
@@ -11,6 +11,6 @@ import java.lang.annotation.*;
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
 @Documented
-@Qualifier("crm")
-public @interface Crm {
+@Qualifier("blog")
+public @interface Blog {
 }

@@ -1,4 +1,4 @@
-package jpa.crm;
+package demo.blog;
 
 import lombok.Data;
 
@@ -11,13 +11,12 @@ import javax.persistence.Table;
 	* @author <a href="mailto:josh@joshlong.com">Josh Long</a>
 	*/
 @Entity
-@Table(name = "orders")
 @Data
-public class Order {
+@Table(name = "post")
+public class Post {
 
 		@Id
 		@GeneratedValue
 		private Long id;
-
-		private String sku;
+		private String title;
 }
