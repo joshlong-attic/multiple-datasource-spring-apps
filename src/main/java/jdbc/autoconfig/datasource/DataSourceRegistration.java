@@ -38,11 +38,6 @@ public class DataSourceRegistration implements BeanNameAware, BeanClassLoaderAwa
 
 		@Override
 		public void afterPropertiesSet() throws Exception {
-				log.info("beanName");
-				log.info("dataSource");
-				Assert.notNull(this.beanName, "beanName is available.");
-				Assert.notNull(this.dataSource, "dataSource is available.");
 				this.dataSource.afterPropertiesSet();
-
 		}
 }
