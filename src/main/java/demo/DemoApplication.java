@@ -10,16 +10,12 @@ import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
-import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.orm.jpa.JpaTransactionManager;
 import xdb.jpa.DataSourceRegistration;
-import xdb.jpa.EnableMultipleJpaDatabases;
+import xdb.jpa.EnableMultipleJpaRegistrations;
 
 import javax.persistence.EntityManagerFactory;
 import javax.sql.DataSource;
@@ -28,7 +24,7 @@ import javax.sql.DataSource;
 	* @author <a href="mailto:josh@joshlong.com">Josh Long</a>
 	*/
 @SpringBootApplication
-@EnableMultipleJpaDatabases({"blog", "crm"})
+@EnableMultipleJpaRegistrations({"blog", "crm"})
 @Log4j2
 public class DemoApplication {
 

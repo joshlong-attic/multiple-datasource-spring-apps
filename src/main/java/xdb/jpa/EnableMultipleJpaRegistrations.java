@@ -11,7 +11,7 @@ import java.lang.annotation.*;
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 @Inherited
-@Import(MultipleJpaDatabaseImportBeanDefinitionRegistrar.class)
-public @interface EnableMultipleJpaDatabases {
+@Import(MultipleJpaRegistrationImportBeanDefinitionRegistrar.class)
+public @interface EnableMultipleJpaRegistrations {
 		String[] value() default {};
 }

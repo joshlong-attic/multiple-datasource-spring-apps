@@ -8,10 +8,6 @@ import org.springframework.beans.PropertyEditorRegistry;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.support.*;
-import org.springframework.boot.autoconfigure.AutoConfigureBefore;
-import org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
-import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
 import org.springframework.boot.context.properties.VisibleConversionServiceDeducer;
 import org.springframework.boot.context.properties.VisiblePropertySourcesDeducer;
 import org.springframework.boot.context.properties.bind.Binder;
@@ -43,7 +39,7 @@ import java.util.function.Supplier;
 	*/
 @Log4j2
 @Configuration
-class MultipleJpaDatabaseImportBeanDefinitionRegistrar implements ImportBeanDefinitionRegistrar, EnvironmentAware, ResourceLoaderAware {
+class MultipleJpaRegistrationImportBeanDefinitionRegistrar implements ImportBeanDefinitionRegistrar, EnvironmentAware, ResourceLoaderAware {
 
 		private Environment environment;
 		private ResourceLoader resourceLoader;
@@ -99,13 +95,13 @@ class MultipleJpaDatabaseImportBeanDefinitionRegistrar implements ImportBeanDefi
 
 		private String registerApplicationContextHolderBean(BeanDefinitionRegistry registry) {
 
-				String name = MultipleJpaDatabaseImportBeanDefinitionRegistrar.ApplicationContextHolder.class.getName();
+				String name = MultipleJpaRegistrationImportBeanDefinitionRegistrar.ApplicationContextHolder.class.getName();
 				if (registry.containsBeanDefinition(name)) {
 						return name;
 				}
 
 				AbstractBeanDefinition beanDefinition = BeanDefinitionBuilder
-					.genericBeanDefinition(MultipleJpaDatabaseImportBeanDefinitionRegistrar.ApplicationContextHolder.class)
+					.genericBeanDefinition(MultipleJpaRegistrationImportBeanDefinitionRegistrar.ApplicationContextHolder.class)
 					.setRole(BeanDefinition.ROLE_SUPPORT)
 					.getBeanDefinition();
 
@@ -161,7 +157,7 @@ class MultipleJpaDatabaseImportBeanDefinitionRegistrar implements ImportBeanDefi
 						@Override
 						public Binder get() {
 								if (null == this.binder) {
-										MultipleJpaDatabaseImportBeanDefinitionRegistrar.ApplicationContextHolder applicationContextHolder = defaultListableBeanFactory.getBean(achBeanName, MultipleJpaDatabaseImportBeanDefinitionRegistrar.ApplicationContextHolder.class);
+										MultipleJpaRegistrationImportBeanDefinitionRegistrar.ApplicationContextHolder applicationContextHolder = defaultListableBeanFactory.getBean(achBeanName, MultipleJpaRegistrationImportBeanDefinitionRegistrar.ApplicationContextHolder.class);
 										ApplicationContext applicationContext = applicationContextHolder.applicationContext;
 										this.binder = buildBinderFor(applicationContext);
 								}
@@ -170,7 +166,7 @@ class MultipleJpaDatabaseImportBeanDefinitionRegistrar implements ImportBeanDefi
 				};
 
 				/*importingClassMetadata
-					.getAllAnnotationAttributes(EnableMultipleJpaDatabases.class.getName())
+					.getAllAnnotationAttributes(EnableMultipleJpaRegistrations.class.getName())
 					.get("value")
 					.stream()
 					.map(o -> (String[]) o)
@@ -179,7 +175,7 @@ class MultipleJpaDatabaseImportBeanDefinitionRegistrar implements ImportBeanDefi
 
 				// todo factor this out into a nested annotation set
 				/*
-				 @EnableMultipleJpaDatabases (
+				 @EnableMultipleJpaRegistrations (
 				 	{
 				 		 @MDJ("crm", pkg.for.crm.Order.class)},
 				 	 	@MDJ("blog", pkg.for.blog.Post.class)
