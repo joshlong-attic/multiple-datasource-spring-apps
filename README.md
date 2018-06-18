@@ -235,6 +235,46 @@ public class DemoApplication {
 				});
 		}
 }
+```
 
+What demonstrates is that you now have multiple JPA repositories, databases, and more available for injection in your code. However, as this introduces the possibility of duplicate beans, we need a way to distinguish which instance we want. This library automatically gives every bean a _qualifier_. You can use the Spring `@Qualifier` annotation with the same string as you use for the configuration properties, `crm` and `blog`, in this case. 
+
+Now, you might not want to duplicate that magic string everywhere in your code. And I don't blame you! So create meta annotations, like this:
 
 ```
+package demo.blog;
+
+import org.springframework.beans.factory.annotation.Qualifier;
+
+import java.lang.annotation.*;
+
+@Target({ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER, ElementType.TYPE, ElementType.ANNOTATION_TYPE})
+@Retention(RetentionPolicy.RUNTIME)
+@Inherited
+@Documented
+@Qualifier("blog")
+public @interface Blog {
+}
+```
+
+and
+
+```
+package demo.crm;
+
+import org.springframework.beans.factory.annotation.Qualifier;
+
+import java.lang.annotation.*;
+
+@Target({ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER, ElementType.TYPE, ElementType.ANNOTATION_TYPE})
+@Retention(RetentionPolicy.RUNTIME)
+@Inherited
+@Documented
+@Qualifier("crm")
+public @interface Crm {
+}
+```
+
+Now, you can replace all uses of `@Qualifier("crm")` with `@Crm` and all uses of `@Qualifier("blog")` with `@Blog`. 
+
+Enjoy!
