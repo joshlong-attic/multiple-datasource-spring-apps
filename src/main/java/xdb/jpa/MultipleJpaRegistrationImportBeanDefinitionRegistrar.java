@@ -20,6 +20,7 @@ import org.springframework.data.jpa.repository.config.JpaRepositoryConfigExtensi
 import org.springframework.data.repository.config.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.orm.jpa.JpaTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
@@ -169,6 +170,27 @@ class MultipleJpaRegistrationImportBeanDefinitionRegistrar implements ImportBean
 				}
 		}
 
+		static class JpaRegistrationConfigurerSupplier implements Supplier<DataSource> {
+
+				private final DefaultListableBeanFactory defaultListableBeanFactory;
+				private final String label;
+				private final String jpaRegistrationConfigurerBeanName;
+
+				JpaRegistrationConfigurerSupplier(String label, String jparcbn, DefaultListableBeanFactory defaultListableBeanFactory) {
+						this.defaultListableBeanFactory = defaultListableBeanFactory;
+						this.jpaRegistrationConfigurerBeanName = jparcbn;
+						this.label = label;
+				}
+
+				@Override
+				public DataSource get() {
+
+						JpaRegistrationConfigurer configurer = this.defaultListableBeanFactory
+							.getBean(this.jpaRegistrationConfigurerBeanName, JpaRegistrationConfigurer.class);
+
+						return configurer.getDataSourceFor(this.label);
+				}
+		}
 
 		protected void registerJpaRegistrationsForPrefixAndPackage(
 			DefaultListableBeanFactory registry,
@@ -176,14 +198,24 @@ class MultipleJpaRegistrationImportBeanDefinitionRegistrar implements ImportBean
 			String label,
 			String packageName) {
 
-				// DataSourceRegistration
 				BoundDataSourceRegistrationSupplier dsrSupplier = new BoundDataSourceRegistrationSupplier(binderSupplier, label);
+
+				// DataSourceRegistration
 				this.registerLazyInfrastructureBeanForLabel(label, label + DataSourceRegistration.class.getSimpleName(), DataSourceRegistration.class, registry, dsrSupplier);
 
 				// DataSource
 				String dataSourceBeanName = label + DataSource.class.getSimpleName();
-				BoundDataSourceSupplier boundDataSourceSupplier = new BoundDataSourceSupplier(dsrSupplier);
-				this.registerLazyInfrastructureBeanForLabel(label, dataSourceBeanName, DataSource.class, registry, boundDataSourceSupplier);
+
+				String jpaConfigurerBeanNames[];
+				Supplier<DataSource> dataSourceSupplier;
+				if ((jpaConfigurerBeanNames = registry.getBeanNamesForType(JpaRegistrationConfigurer.class)).length > 0) {
+						Assert.isTrue(jpaConfigurerBeanNames.length == 1, "there should only be one instance of " + JpaRegistrationConfigurer.class.getName());
+						dataSourceSupplier = new JpaRegistrationConfigurerSupplier(label, jpaConfigurerBeanNames[0], registry);
+				}
+				else {
+						dataSourceSupplier = new BoundDataSourceSupplier(dsrSupplier);
+				}
+				this.registerLazyInfrastructureBeanForLabel(label, dataSourceBeanName, DataSource.class, registry, dataSourceSupplier);
 
 				// JdbcTemplate
 				this.registerLazyInfrastructureBeanForLabel(label, label + JdbcTemplate.class.getSimpleName(), JdbcTemplate.class, registry, new JdbcTemplateSupplier(registry, dataSourceBeanName));
@@ -199,9 +231,13 @@ class MultipleJpaRegistrationImportBeanDefinitionRegistrar implements ImportBean
 				String jpaTransactionManagerBeanName = label + JpaTransactionManager.class.getName();
 				this.registerLazyInfrastructureBeanForLabel(label, jpaTransactionManagerBeanName, JpaTransactionManager.class, registry, jpaTransactionManagerSupplier);
 
+				// JPA TransactionTemplate
+				this.registerLazyInfrastructureBeanForLabel(label, label + TransactionTemplate.class.getSimpleName(),
+					TransactionTemplate.class, registry, () -> new TransactionTemplate(
+						registry.getBean(jpaTransactionManagerBeanName, JpaTransactionManager.class)
+					)) ;
+
 				// Spring Data JPA
 				this.registerJpaRepositories(packageName, jpaTransactionManagerBeanName, jpaEntityManagerFactoryBeanName, registry);
 		}
-
-
 }
