@@ -27,15 +27,42 @@ import javax.sql.DataSource;
 /**
 	* @author <a href="mailto:josh@joshlong.com">Josh Long</a>
 	*/
-@EnableAutoConfiguration(exclude = {
-	DataSourceAutoConfiguration.class,
-	JpaRepositoriesAutoConfiguration.class,
-	HibernateJpaAutoConfiguration.class
-})
 @SpringBootApplication
 @EnableMultipleJpaDatabases({"blog", "crm"})
 @Log4j2
-public class MDJ {
+public class DemoApplication {
+
+		public static void main(String args[]) {
+				SpringApplication.run(DemoApplication.class, args);
+		}
+
+		@Bean
+		ApplicationRunner runner(
+			@Crm DataSourceRegistration crmDSR, @Crm DataSource crmDS, @Crm JdbcTemplate crmJT, @Crm EntityManagerFactory crmEMF, @Crm JpaTransactionManager crmTxManager, PostRepository pr,
+			@Blog DataSourceRegistration blogDSR, @Blog DataSource blogDS, @Blog JdbcTemplate blogJT, @Blog EntityManagerFactory blogEMF, @Blog JpaTransactionManager blogTxManager, OrderRepository or) {
+
+				return args -> {
+						Runnable crmRunnable = () -> {
+								crmEMF
+									.createEntityManager()
+									.createQuery("select o from " + Order.class.getName() + " o", Order.class)
+									.getResultList()
+									.forEach(p -> log.info("order: " + ToStringBuilder.reflectionToString(p)));
+								or.findAll().forEach(o -> log.info("order (JPA): " + ToStringBuilder.reflectionToString(o)));
+						};
+						log("CRM", crmDSR, crmDS, crmJT, crmEMF, crmTxManager, crmRunnable);
+
+						Runnable blogRunnable = () -> {
+								blogEMF
+									.createEntityManager()
+									.createQuery("select b from " + Post.class.getName() + " b", Post.class)
+									.getResultList()
+									.forEach(p -> log.info("post: " + ToStringBuilder.reflectionToString(p)));
+								pr.findAll().forEach(p -> log.info("post (JPA): " + ToStringBuilder.reflectionToString(p)));
+						};
+						log("BLOG", blogDSR, blogDS, blogJT, blogEMF, blogTxManager, blogRunnable);
+				};
+		}
 
 		private static void log(String label, DataSourceRegistration dsr, DataSource ds, JdbcTemplate jt, EntityManagerFactory emf, JpaTransactionManager txManager, Runnable r) {
 				log.info("======================================================================");
@@ -47,43 +74,6 @@ public class MDJ {
 				log.info(ToStringBuilder.reflectionToString(txManager));
 				r.run();
 				log.info(System.lineSeparator());
-		}
-
-		public static void main(String args[]) {
-				SpringApplication.run(MDJ.class, args);
-		}
-
-		@Bean
-		ApplicationRunner runner(@Crm DataSourceRegistration crmDSR, @Crm DataSource crmDS, @Crm JdbcTemplate crmJT, @Crm EntityManagerFactory crmEMF, @Crm JpaTransactionManager crmTxManager, PostRepository pr,
-																											@Blog DataSourceRegistration blogDSR, @Blog DataSource blogDS, @Blog JdbcTemplate blogJT, @Blog EntityManagerFactory blogEMF, @Blog JpaTransactionManager blogTxManager, OrderRepository or) {
-				return args -> {
-
-						Runnable crmRunnable = () -> {
-
-								crmEMF
-									.createEntityManager()
-									.createQuery("select o from " + Order.class.getName() + " o", Order.class)
-									.getResultList()
-									.forEach(p -> log.info("order: " + ToStringBuilder.reflectionToString(p)));
-
-								or.findAll().forEach(o -> log.info("order (JPA): " + ToStringBuilder.reflectionToString(o)));
-
-						};
-						log("CRM", crmDSR, crmDS, crmJT, crmEMF, crmTxManager, crmRunnable);
-
-						Runnable blogRunnable = () -> {
-
-								blogEMF
-									.createEntityManager()
-									.createQuery("select b from " + Post.class.getName() + " b", Post.class)
-									.getResultList()
-									.forEach(p -> log.info("post: " + ToStringBuilder.reflectionToString(p)));
-
-								pr.findAll().forEach(p -> log.info("post (JPA): " + ToStringBuilder.reflectionToString(p)));
-
-						};
-						log("BLOG", blogDSR, blogDS, blogJT, blogEMF, blogTxManager, blogRunnable);
-				};
 		}
 }
 

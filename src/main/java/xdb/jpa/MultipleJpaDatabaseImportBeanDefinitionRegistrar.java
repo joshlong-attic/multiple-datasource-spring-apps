@@ -8,6 +8,10 @@ import org.springframework.beans.PropertyEditorRegistry;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.support.*;
+import org.springframework.boot.autoconfigure.AutoConfigureBefore;
+import org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
 import org.springframework.boot.context.properties.VisibleConversionServiceDeducer;
 import org.springframework.boot.context.properties.VisiblePropertySourcesDeducer;
 import org.springframework.boot.context.properties.bind.Binder;
@@ -15,6 +19,7 @@ import org.springframework.boot.context.properties.bind.PropertySourcesPlacehold
 import org.springframework.boot.context.properties.source.ConfigurationPropertySource;
 import org.springframework.boot.context.properties.source.ConfigurationPropertySources;
 import org.springframework.context.*;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.ImportBeanDefinitionRegistrar;
 import org.springframework.core.convert.ConversionService;
 import org.springframework.core.env.Environment;
@@ -37,6 +42,7 @@ import java.util.function.Supplier;
 	* @author <a href="mailto:josh@joshlong.com">Josh Long</a>
 	*/
 @Log4j2
+@Configuration
 class MultipleJpaDatabaseImportBeanDefinitionRegistrar implements ImportBeanDefinitionRegistrar, EnvironmentAware, ResourceLoaderAware {
 
 		private Environment environment;
