@@ -3,6 +3,7 @@ package xdb.jpa;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.config.AutowireCapableBeanFactory;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.support.*;
 import org.springframework.boot.context.properties.bind.Binder;
@@ -34,10 +35,12 @@ import java.util.stream.Stream;
 	*/
 @Log4j2
 @Configuration
-class MultipleJpaRegistrationImportBeanDefinitionRegistrar implements ImportBeanDefinitionRegistrar, EnvironmentAware, ResourceLoaderAware {
+class MultipleJpaRegistrationImportBeanDefinitionRegistrar implements
+	ApplicationContextAware, ImportBeanDefinitionRegistrar, EnvironmentAware, ResourceLoaderAware {
 
 		private Environment environment;
 		private ResourceLoader resourceLoader;
+		private ApplicationContext applicationContext;
 
 		@Override
 		public void setEnvironment(Environment environment) {
@@ -50,11 +53,22 @@ class MultipleJpaRegistrationImportBeanDefinitionRegistrar implements ImportBean
 		}
 
 		@Override
+		public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+				this.applicationContext = applicationContext;
+		}
+
+		@Override
 		public void registerBeanDefinitions(AnnotationMetadata importingClassAnnotationMetadata, BeanDefinitionRegistry registry) {
 
 				DefaultListableBeanFactory defaultListableBeanFactory = DefaultListableBeanFactory.class.cast(registry);
-				String applicationContextHolderBeanName = this.registerApplicationContextHolderBean(defaultListableBeanFactory);
-				ApplicationContextAwareBinderSupplier binderSupplier = new ApplicationContextAwareBinderSupplier(defaultListableBeanFactory, applicationContextHolderBeanName);
+
+				if (this.applicationContext == null && registry instanceof AutowireCapableBeanFactory) {
+						AutowireCapableBeanFactory.class.cast(registry).initializeBean(this, this.getClass().getSimpleName());
+				}
+
+				Assert.notNull(this.applicationContext, "the " + ApplicationContext.class.getName() + " reference can't be null!");
+
+				ApplicationContextAwareBinderSupplier binderSupplier = new ApplicationContextAwareBinderSupplier(this.applicationContext);
 
 				String enableMultipleJpaRegistrationsAnnotationName = EnableMultipleJpaRegistrations.class.getName();
 
@@ -111,32 +125,6 @@ class MultipleJpaRegistrationImportBeanDefinitionRegistrar implements ImportBean
 				return newBeanName;
 		}
 
-		// yuck. i do this only to have a lazily resolved pointer to the ApplicationContext. There has to be an easier way.
-		static class ApplicationContextHolder implements ApplicationContextAware {
-
-				ApplicationContext applicationContext;
-
-				@Override
-				public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
-						this.applicationContext = applicationContext;
-				}
-		}
-
-		protected String registerApplicationContextHolderBean(BeanDefinitionRegistry registry) {
-
-				String name = MultipleJpaRegistrationImportBeanDefinitionRegistrar.ApplicationContextHolder.class.getName();
-				if (registry.containsBeanDefinition(name)) {
-						return name;
-				}
-
-				AbstractBeanDefinition beanDefinition = BeanDefinitionBuilder
-					.genericBeanDefinition(MultipleJpaRegistrationImportBeanDefinitionRegistrar.ApplicationContextHolder.class)
-					.setRole(BeanDefinition.ROLE_SUPPORT)
-					.getBeanDefinition();
-
-				registry.registerBeanDefinition(name, beanDefinition);
-				return name;
-		}
 
 		protected void registerJpaRepositories(
 			String pkg, String transactionManagerBeanName, String entityManagerBeanName,
@@ -235,7 +223,7 @@ class MultipleJpaRegistrationImportBeanDefinitionRegistrar implements ImportBean
 				this.registerLazyInfrastructureBeanForLabel(label, label + TransactionTemplate.class.getSimpleName(),
 					TransactionTemplate.class, registry, () -> new TransactionTemplate(
 						registry.getBean(jpaTransactionManagerBeanName, JpaTransactionManager.class)
-					)) ;
+					));
 
 				// Spring Data JPA
 				this.registerJpaRepositories(packageName, jpaTransactionManagerBeanName, jpaEntityManagerFactoryBeanName, registry);
