@@ -8,7 +8,7 @@ Let's assume you have a freshly generated Spring Boot project from [the Spring I
 which you've selected a JDBC database driver (in this case, `MySQL`, the example uses MySQL) and Lombok, a compile-time 
 annotation processor.
 
-Add this library (`com.joshlong`:`xdb-jpa`:`0.0.1-SNAPSHOT`) to your application's classpath.
+Build this library and add this library (`com.joshlong`:`xdb-jpa`:`0.0.1-SNAPSHOT`) to your application's classpath.
 
 Let's suppose you have the followng configuration in your Spring Boot `src/main/resources/application.properties`. 
 These point to real databases on my machine. Configure appropriately and as necessary for your machine.
