@@ -6,6 +6,7 @@ import jpa.blog.Post;
 import jpa.blog.PostRepository;
 import jpa.crm.Order;
 import jpa.crm.OrderRepository;
+import lombok.extern.log4j.Log4j2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -147,112 +148,11 @@ public class JpaApplication {
 
 }
 
-class DynamicRepositoryConfigurationSourceSupport extends RepositoryConfigurationSourceSupport {
 
-		private final Package pkg;
-		private final String transactionManagerRef, entityManagerFactoryRef;
-
-		public DynamicRepositoryConfigurationSourceSupport(Environment environment,
-																																																					ClassLoader classLoader, BeanDefinitionRegistry registry, Package pkg,
-																																																					String transactionManagerRef, String emf) {
-				super(environment, classLoader, registry);
-				this.transactionManagerRef = transactionManagerRef;
-				this.pkg = pkg;
-				this.entityManagerFactoryRef = emf;
-		}
-
-		@Override
-		public Object getSource() {
-				return null;
-		}
-
-		@Override
-		public Streamable<String> getBasePackages() {
-				return Streamable.of(this.pkg.getName());
-		}
-
-		@Override
-		public Optional<Object> getQueryLookupStrategyKey() {
-				return Optional.empty();
-		}
-
-		@Override
-		public Optional<String> getRepositoryImplementationPostfix() {
-				return Optional.empty();
-		}
-
-		@Override
-		public Optional<String> getNamedQueryLocation() {
-				return Optional.empty();
-		}
-
-		@Override
-		public Optional<String> getRepositoryBaseClassName() {
-				return Optional.empty();
-		}
-
-		@Override
-		public Optional<String> getRepositoryFactoryBeanClassName() {
-				return Optional.empty();
-		}
-
-		@Override
-		public Optional<String> getAttribute(String name) {
-
-				if (name.equalsIgnoreCase("transactionManagerRef")) {
-						return Optional.of(transactionManagerRef);
-				}
-
-				if (name.equalsIgnoreCase("entityManagerFactoryRef")) {
-						return Optional.of(this.entityManagerFactoryRef);
-				}
-
-				return Optional.empty();
-		}
-
-		@Override
-		public boolean usesExplicitFilters() {
-				return false;
-		}
-}
-
+@Log4j2
 class JpaRegistrar implements ImportBeanDefinitionRegistrar, EnvironmentAware, ResourceLoaderAware {
 
-		private Logger logger = LoggerFactory.getLogger(getClass());
 
-		private void register(Package pkg, String t, String e, AnnotationMetadata am, BeanDefinitionRegistry beanDefinitionRegistry) {
-
-				RepositoryConfigurationSourceSupport configurationSource = new DynamicRepositoryConfigurationSourceSupport(
-					this.environment, getClass().getClassLoader(), beanDefinitionRegistry, pkg, t, e);
-
-				RepositoryConfigurationExtension extension = new JpaRepositoryConfigExtension();
-				RepositoryConfigurationUtils.exposeRegistration(extension, beanDefinitionRegistry, configurationSource);
-
-				extension.registerBeansForRoot(beanDefinitionRegistry, configurationSource);
-
-				VisibleRepositoryBeanDefinitionBuilder builder = new VisibleRepositoryBeanDefinitionBuilder(beanDefinitionRegistry, extension, this.resourceLoader, this.environment);
-
-				List<BeanComponentDefinition> definitions = new ArrayList<>();
-
-				for (RepositoryConfiguration<? extends RepositoryConfigurationSource> configuration : extension.getRepositoryConfigurations(configurationSource, resourceLoader, true)) {
-
-						BeanDefinitionBuilder definitionBuilder = builder.build(configuration);
-						extension.postProcess(definitionBuilder, configurationSource);
-						definitionBuilder.addPropertyValue("enableDefaultTransactions", false);
-
-						AbstractBeanDefinition beanDefinition = definitionBuilder.getBeanDefinition();
-						String beanName = configurationSource.generateBeanName(beanDefinition);
-
-						logger
-							.debug("Spring Data {} - Registering repository: {} - Interface: {} - Factory: {}",
-								extension.getModuleName(), beanName, configuration.getRepositoryInterface(), configuration.getRepositoryFactoryBeanClassName());
-
-						beanDefinition.setAttribute("factoryBeanObjectType", configuration.getRepositoryInterface());
-
-						beanDefinitionRegistry.registerBeanDefinition(beanName, beanDefinition);
-						definitions.add(new BeanComponentDefinition(beanDefinition, beanName));
-				}
-		}
 
 		@Override
 		public void registerBeanDefinitions(AnnotationMetadata annotationMetadata, BeanDefinitionRegistry beanDefinitionRegistry) {
@@ -263,8 +163,8 @@ class JpaRegistrar implements ImportBeanDefinitionRegistrar, EnvironmentAware, R
 				// it would be nice to be able to start with crm.datasource.username, password, driver = ... and blog.datasource.username, password, driver,
 				// and arrive automatically at: auto-registered JpaRepositories, JdbcTemplate, DataSource, JpaTransactionManagers, etc.
 
-				this.register(Order.class.getPackage(), "crmTM", "crmEMF", annotationMetadata, beanDefinitionRegistry);
-				this.register(Post.class.getPackage(), "blogTM", "blogEMF", annotationMetadata, beanDefinitionRegistry);
+//				this.register(Order.class.getPackage(), "crmTM", "crmEMF", annotationMetadata, beanDefinitionRegistry);
+//				this.register(Post.class.getPackage(), "blogTM", "blogEMF", annotationMetadata, beanDefinitionRegistry);
 		}
 
 		private Environment environment;

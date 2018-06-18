@@ -9,8 +9,10 @@ import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.PropertyEditorRegistry;
+import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.beans.factory.parsing.BeanComponentDefinition;
 import org.springframework.beans.factory.support.*;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringApplication;
@@ -27,25 +29,27 @@ import org.springframework.boot.context.properties.bind.PropertySourcesPlacehold
 import org.springframework.boot.context.properties.source.ConfigurationPropertySource;
 import org.springframework.boot.context.properties.source.ConfigurationPropertySources;
 import org.springframework.boot.orm.jpa.EntityManagerFactoryBuilder;
-import org.springframework.context.ApplicationContext;
-import org.springframework.context.ApplicationContextAware;
-import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.context.*;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.ImportBeanDefinitionRegistrar;
 import org.springframework.core.ResolvableType;
 import org.springframework.core.convert.ConversionService;
+import org.springframework.core.env.Environment;
 import org.springframework.core.env.PropertySources;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.core.type.AnnotationMetadata;
+import org.springframework.data.jpa.repository.config.JpaRepositoryConfigExtension;
+import org.springframework.data.repository.config.*;
+import org.springframework.data.util.Streamable;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
 
+import javax.persistence.EntityManagerFactory;
 import javax.sql.DataSource;
 import java.lang.annotation.*;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -63,21 +67,34 @@ import java.util.function.Supplier;
 public class MDJ {
 
 		@Bean
-		ApplicationRunner runner(@Crm DataSourceRegistration crmDSR, @Crm DataSource crmDS, @Crm JdbcTemplate crmJT,
-																											@Blog DataSourceRegistration blogDSR, @Blog DataSource blogDS, @Blog JdbcTemplate blogJT) {
+		ApplicationRunner runner(@Crm DataSourceRegistration crmDSR, @Crm DataSource crmDS, @Crm JdbcTemplate crmJT, @Crm EntityManagerFactory crmEMF,
+																											@Blog DataSourceRegistration blogDSR, @Blog DataSource blogDS, @Blog JdbcTemplate blogJT, @Blog EntityManagerFactory blogEMF) {
 				return args -> {
-						log("CRM", crmDSR, crmDS, crmJT);
-						log("BLOG", blogDSR, blogDS, blogJT);
+						log("CRM", crmDSR, crmDS, crmJT, crmEMF);
+						crmEMF
+							.createEntityManager()
+							.createQuery("select p from " + Order.class.getName() + " p", Order.class)
+							.getResultList()
+							.forEach(p -> log.info("order: " + ToStringBuilder.reflectionToString(p)));
+
+						log("BLOG", blogDSR, blogDS, blogJT, blogEMF);
+						blogEMF
+							.createEntityManager()
+							.createQuery("select b from " + Post.class.getName() + " b ", Post.class)
+							.getResultList()
+							.forEach(p -> log.info("post: " + ToStringBuilder.reflectionToString(p)));
 				};
 		}
 
-		private static void log(String label, DataSourceRegistration dsr, DataSource ds, JdbcTemplate jt) {
+		private static void log(String label, DataSourceRegistration dsr, DataSource ds, JdbcTemplate jt, EntityManagerFactory emf) {
 				log.info("==============================================");
 				log.info(label);
 				log.info(ToStringBuilder.reflectionToString(dsr));
 				log.info(ToStringBuilder.reflectionToString(ds));
 				log.info(ToStringBuilder.reflectionToString(jt));
+				log.info(ToStringBuilder.reflectionToString(emf));
 		}
+
 
 		public static void main(String args[]) {
 				SpringApplication.run(MDJ.class, args);
@@ -95,7 +112,12 @@ public class MDJ {
 }
 
 @Log4j2
-class DynamicDataSourcePropertiesBindingPostProcessor implements ImportBeanDefinitionRegistrar {
+class DynamicDataSourcePropertiesBindingPostProcessor implements
+	ImportBeanDefinitionRegistrar, EnvironmentAware, ResourceLoaderAware {
+
+		private Environment environment;
+		private ResourceLoader resourceLoader;
+
 
 		private <T> void register(String label,
 																												String newBeanName,
@@ -115,6 +137,17 @@ class DynamicDataSourcePropertiesBindingPostProcessor implements ImportBeanDefin
 						log.debug("adding qualifier '" + label + "' for " + clzz.getName() + " instance.");
 						log.debug("registered bean " + newBeanName + ".");
 				}
+		}
+
+		@Override
+		public void setEnvironment(Environment environment) {
+				this.environment = environment;
+		}
+
+		@Override
+		public void setResourceLoader(ResourceLoader resourceLoader) {
+
+				this.resourceLoader = resourceLoader;
 		}
 
 		private static class BoundDataSourceSupplier implements Supplier<DataSource> {
@@ -147,7 +180,7 @@ class DynamicDataSourcePropertiesBindingPostProcessor implements ImportBeanDefin
 
 				@Override
 				public JdbcTemplate get() {
-						return new JdbcTemplate(beanFactory.getBean(this.beanName, DataSource.class));
+						return new JdbcTemplate(this.beanFactory.getBean(this.beanName, DataSource.class));
 				}
 		}
 
@@ -198,7 +231,8 @@ class DynamicDataSourcePropertiesBindingPostProcessor implements ImportBeanDefin
 				return new Binder(from, new PropertySourcesPlaceholdersResolver(propertySources), bean, editorRegistryConsumer);
 		}
 
-		private static class ACH implements ApplicationContextAware {
+		// yuck. i do this only to have a lazily resolved pointer to the ApplicationContext. There has to be an easier way.
+		private static class ApplicationContextHolder implements ApplicationContextAware {
 
 				ApplicationContext applicationContext;
 
@@ -208,11 +242,11 @@ class DynamicDataSourcePropertiesBindingPostProcessor implements ImportBeanDefin
 				}
 		}
 
-		private String registerAchBean(BeanDefinitionRegistry registry) {
-				AbstractBeanDefinition beanDefinition = BeanDefinitionBuilder.genericBeanDefinition(ACH.class)
+		private String registerApplicationContextHolderBean(BeanDefinitionRegistry registry) {
+				AbstractBeanDefinition beanDefinition = BeanDefinitionBuilder.genericBeanDefinition(ApplicationContextHolder.class)
 					.setRole(BeanDefinition.ROLE_SUPPORT)
 					.getBeanDefinition();
-				String name = ACH.class.getName();
+				String name = ApplicationContextHolder.class.getName();
 				registry.registerBeanDefinition(name, beanDefinition);
 				return name;
 		}
@@ -220,11 +254,8 @@ class DynamicDataSourcePropertiesBindingPostProcessor implements ImportBeanDefin
 		@Override
 		public void registerBeanDefinitions(AnnotationMetadata importingClassMetadata, BeanDefinitionRegistry registry) {
 
-
 				DefaultListableBeanFactory defaultListableBeanFactory = DefaultListableBeanFactory.class.cast(registry);
-
-				String achBeanName = this.registerAchBean(defaultListableBeanFactory);
-
+				String achBeanName = this.registerApplicationContextHolderBean(defaultListableBeanFactory);
 				Supplier<Binder> supplier = new Supplier<Binder>() {
 
 						private Binder binder;
@@ -232,8 +263,8 @@ class DynamicDataSourcePropertiesBindingPostProcessor implements ImportBeanDefin
 						@Override
 						public Binder get() {
 								if (null == this.binder) {
-										ACH ach = defaultListableBeanFactory.getBean(achBeanName, ACH.class);
-										ApplicationContext applicationContext = ach.applicationContext;
+										ApplicationContextHolder applicationContextHolder = defaultListableBeanFactory.getBean(achBeanName, ApplicationContextHolder.class);
+										ApplicationContext applicationContext = applicationContextHolder.applicationContext;
 										this.binder = buildBinderFor(applicationContext);
 								}
 								return this.binder;
@@ -260,19 +291,62 @@ class DynamicDataSourcePropertiesBindingPostProcessor implements ImportBeanDefin
 				Map<String, Package> registerMetaData = new HashMap<>();
 				registerMetaData.put("blog", Post.class.getPackage());
 				registerMetaData.put("crm", Order.class.getPackage());
-				registerMetaData.forEach((prefix, pkg) -> registerForLabel(defaultListableBeanFactory, supplier, prefix, pkg.getName()));
-
-
+				registerMetaData.forEach((prefix, pkg) -> this.registerForLabel(defaultListableBeanFactory, supplier, prefix, pkg.getName()));
 		}
 
-		private static LocalContainerEntityManagerFactoryBean entityManagerFactoryBean(DataSource ds, String puName, Package pkg) {
-				return new EntityManagerFactoryBuilder(
+		private void registerJpaRepositories(Package pkg, String t, String e, AnnotationMetadata am, BeanDefinitionRegistry beanDefinitionRegistry) {
+
+				RepositoryConfigurationSourceSupport configurationSource = new DynamicRepositoryConfigurationSourceSupport(
+					this.environment, getClass().getClassLoader(), beanDefinitionRegistry, pkg, t, e);
+
+				RepositoryConfigurationExtension extension = new JpaRepositoryConfigExtension();
+				RepositoryConfigurationUtils.exposeRegistration(extension, beanDefinitionRegistry, configurationSource);
+
+				extension.registerBeansForRoot(beanDefinitionRegistry, configurationSource);
+
+				VisibleRepositoryBeanDefinitionBuilder builder = new VisibleRepositoryBeanDefinitionBuilder(beanDefinitionRegistry, extension, this.resourceLoader, this.environment);
+
+				List<BeanComponentDefinition> definitions = new ArrayList<>();
+
+				for (RepositoryConfiguration<? extends RepositoryConfigurationSource> configuration : extension.getRepositoryConfigurations(configurationSource, resourceLoader, true)) {
+
+						BeanDefinitionBuilder definitionBuilder = builder.build(configuration);
+						extension.postProcess(definitionBuilder, configurationSource);
+						definitionBuilder.addPropertyValue("enableDefaultTransactions", false);
+
+						AbstractBeanDefinition beanDefinition = definitionBuilder.getBeanDefinition();
+						String beanName = configurationSource.generateBeanName(beanDefinition);
+
+						log
+							.debug("Spring Data {} - Registering repository: {} - Interface: {} - Factory: {}",
+								extension.getModuleName(), beanName, configuration.getRepositoryInterface(), configuration.getRepositoryFactoryBeanClassName());
+
+						beanDefinition.setAttribute("factoryBeanObjectType", configuration.getRepositoryInterface());
+
+						beanDefinitionRegistry.registerBeanDefinition(beanName, beanDefinition);
+						definitions.add(new BeanComponentDefinition(beanDefinition, beanName));
+				}
+		}
+
+		private static LocalContainerEntityManagerFactoryBean entityManagerFactoryBean(
+			BeanFactory registry,
+			ResourceLoader resourceLoader,
+			DataSource ds,
+			String puName,
+			Package pkg) {
+
+				LocalContainerEntityManagerFactoryBean build = new EntityManagerFactoryBuilder(
 					new HibernateJpaVendorAdapter(),
 					Collections.emptyMap(), null)
 					.dataSource(ds)
 					.packages(pkg.getName())
 					.persistenceUnit(puName)
 					.build();
+				build.setResourceLoader(resourceLoader);
+				build.setBeanFactory(registry);
+				build.setBeanClassLoader(ClassLoader.getSystemClassLoader());
+				build.afterPropertiesSet();
+				return build;
 		}
 
 		private void registerForLabel(DefaultListableBeanFactory registry,
@@ -290,10 +364,95 @@ class DynamicDataSourcePropertiesBindingPostProcessor implements ImportBeanDefin
 				this.register(label, dataSourceBeanName, DataSource.class, registry, boundDataSourceSupplier);
 
 				// JdbcTemplate
-				this.register(label, label + JdbcTemplate.class.getSimpleName(), JdbcTemplate.class, registry, new JdbcTemplateSupplier(DefaultListableBeanFactory.class.cast(registry), dataSourceBeanName));
+				this.register(label, label + JdbcTemplate.class.getSimpleName(), JdbcTemplate.class, registry, new JdbcTemplateSupplier(registry, dataSourceBeanName));
 
-				// JPA EntityManager
+				// JPA EntityManagerFactory
+				Supplier<EntityManagerFactory> emfSupplier = () ->
+					entityManagerFactoryBean(
+						registry,
+						this.resourceLoader,
+						registry.getBean(dataSourceBeanName, DataSource.class),
+						label + "PU",
+						Package.getPackage(packageName))
+						.getObject();
 
-				log.info("package name: " + packageName);
+				String jpaEntityManagerFactoryBeanName = label + EntityManagerFactory.class.getSimpleName();
+				this.register(label, jpaEntityManagerFactoryBeanName, EntityManagerFactory.class, registry, emfSupplier);
+
 		}
+
+
+		private static class DynamicRepositoryConfigurationSourceSupport extends RepositoryConfigurationSourceSupport {
+
+				private final Package pkg;
+				private final String transactionManagerRef, entityManagerFactoryRef;
+
+				DynamicRepositoryConfigurationSourceSupport(
+					Environment environment,
+					ClassLoader classLoader,
+					BeanDefinitionRegistry registry,
+					Package pkg,
+					String transactionManagerBeanName,
+					String entityManagerFactoryBeanName) {
+						super(environment, classLoader, registry);
+						this.transactionManagerRef = transactionManagerBeanName;
+						this.entityManagerFactoryRef = entityManagerFactoryBeanName;
+						this.pkg = pkg;
+				}
+
+				@Override
+				public Object getSource() {
+						return null;
+				}
+
+				@Override
+				public Streamable<String> getBasePackages() {
+						return Streamable.of(this.pkg.getName());
+				}
+
+				@Override
+				public Optional<Object> getQueryLookupStrategyKey() {
+						return Optional.empty();
+				}
+
+				@Override
+				public Optional<String> getRepositoryImplementationPostfix() {
+						return Optional.empty();
+				}
+
+				@Override
+				public Optional<String> getNamedQueryLocation() {
+						return Optional.empty();
+				}
+
+				@Override
+				public Optional<String> getRepositoryBaseClassName() {
+						return Optional.empty();
+				}
+
+				@Override
+				public Optional<String> getRepositoryFactoryBeanClassName() {
+						return Optional.empty();
+				}
+
+				@Override
+				public Optional<String> getAttribute(String name) {
+
+						if (name.equalsIgnoreCase("transactionManagerRef")) {
+								return Optional.of(transactionManagerRef);
+						}
+
+						if (name.equalsIgnoreCase("entityManagerFactoryRef")) {
+								return Optional.of(this.entityManagerFactoryRef);
+						}
+
+						return Optional.empty();
+				}
+
+				@Override
+				public boolean usesExplicitFilters() {
+						return false;
+				}
+		}
+
 }
