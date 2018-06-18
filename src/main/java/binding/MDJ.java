@@ -4,7 +4,9 @@ import jdbc.autoconfig.datasource.DataSourceRegistration;
 import jdbc.com.example.rds.Blog;
 import jdbc.com.example.rds.Crm;
 import jpa.blog.Post;
+import jpa.blog.PostRepository;
 import jpa.crm.Order;
+import jpa.crm.OrderRepository;
 import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.springframework.beans.BeansException;
@@ -12,7 +14,6 @@ import org.springframework.beans.PropertyEditorRegistry;
 import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.config.BeanDefinition;
-import org.springframework.beans.factory.parsing.BeanComponentDefinition;
 import org.springframework.beans.factory.support.*;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringApplication;
@@ -43,13 +44,17 @@ import org.springframework.data.jpa.repository.config.JpaRepositoryConfigExtensi
 import org.springframework.data.repository.config.*;
 import org.springframework.data.util.Streamable;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.orm.jpa.JpaTransactionManager;
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
 
 import javax.persistence.EntityManagerFactory;
 import javax.sql.DataSource;
 import java.lang.annotation.*;
-import java.util.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -67,34 +72,50 @@ import java.util.function.Supplier;
 public class MDJ {
 
 		@Bean
-		ApplicationRunner runner(@Crm DataSourceRegistration crmDSR, @Crm DataSource crmDS, @Crm JdbcTemplate crmJT, @Crm EntityManagerFactory crmEMF,
-																											@Blog DataSourceRegistration blogDSR, @Blog DataSource blogDS, @Blog JdbcTemplate blogJT, @Blog EntityManagerFactory blogEMF) {
+		ApplicationRunner runner(@Crm DataSourceRegistration crmDSR, @Crm DataSource crmDS, @Crm JdbcTemplate crmJT, @Crm EntityManagerFactory crmEMF, @Crm JpaTransactionManager crmTxManager, PostRepository pr,
+																											@Blog DataSourceRegistration blogDSR, @Blog DataSource blogDS, @Blog JdbcTemplate blogJT, @Blog EntityManagerFactory blogEMF, @Blog JpaTransactionManager blogTxManager, OrderRepository or) {
 				return args -> {
 
-						log("CRM", crmDSR, crmDS, crmJT, crmEMF);
-						crmEMF
-							.createEntityManager()
-							.createQuery("select o from " + Order.class.getName() + " o", Order.class)
-							.getResultList()
-							.forEach(p -> log.info("order: " + ToStringBuilder.reflectionToString(p)));
+						Runnable crmRunnable = () -> {
 
-						log("BLOG", blogDSR, blogDS, blogJT, blogEMF);
-						blogEMF
-							.createEntityManager()
-							.createQuery("select b from " + Post.class.getName() + " b", Post.class)
-							.getResultList()
-							.forEach(p -> log.info("post: " + ToStringBuilder.reflectionToString(p)));
+								crmEMF
+									.createEntityManager()
+									.createQuery("select o from " + Order.class.getName() + " o", Order.class)
+									.getResultList()
+									.forEach(p -> log.info("order: " + ToStringBuilder.reflectionToString(p)));
+
+								or.findAll().forEach(o -> log.info("order (JPA): " + ToStringBuilder.reflectionToString(o)));
+
+						};
+						log("CRM", crmDSR, crmDS, crmJT, crmEMF, crmTxManager, crmRunnable);
+
+						Runnable blogRunnable = () -> {
+
+								blogEMF
+									.createEntityManager()
+									.createQuery("select b from " + Post.class.getName() + " b", Post.class)
+									.getResultList()
+									.forEach(p -> log.info("post: " + ToStringBuilder.reflectionToString(p)));
+
+								pr.findAll().forEach(p -> log.info("post (JPA): " + ToStringBuilder.reflectionToString(p)));
+
+						};
+
+						log("BLOG", blogDSR, blogDS, blogJT, blogEMF, blogTxManager, blogRunnable);
 
 				};
 		}
 
-		private static void log(String label, DataSourceRegistration dsr, DataSource ds, JdbcTemplate jt, EntityManagerFactory emf) {
+		private static void log(String label, DataSourceRegistration dsr, DataSource ds, JdbcTemplate jt, EntityManagerFactory emf, JpaTransactionManager txManager, Runnable r) {
 				log.info("==============================================");
 				log.info(label);
 				log.info(ToStringBuilder.reflectionToString(dsr));
 				log.info(ToStringBuilder.reflectionToString(ds));
 				log.info(ToStringBuilder.reflectionToString(jt));
 				log.info(ToStringBuilder.reflectionToString(emf));
+				log.info(ToStringBuilder.reflectionToString(txManager));
+				r.run();
+				log.info(System.lineSeparator());
 		}
 
 
@@ -148,7 +169,6 @@ class DynamicDataSourcePropertiesBindingPostProcessor implements
 
 		@Override
 		public void setResourceLoader(ResourceLoader resourceLoader) {
-
 				this.resourceLoader = resourceLoader;
 		}
 
@@ -253,6 +273,42 @@ class DynamicDataSourcePropertiesBindingPostProcessor implements
 				return name;
 		}
 
+		private void registerJpaRepositories(
+			String pkg, String transactionManagerBeanName, String entityManagerBeanName,
+			BeanDefinitionRegistry beanDefinitionRegistry) {
+
+				RepositoryConfigurationSourceSupport configurationSource = new DynamicRepositoryConfigurationSourceSupport(
+					this.environment, getClass().getClassLoader(), beanDefinitionRegistry, pkg, transactionManagerBeanName, entityManagerBeanName);
+
+				RepositoryConfigurationExtension extension = new JpaRepositoryConfigExtension();
+				RepositoryConfigurationUtils.exposeRegistration(extension, beanDefinitionRegistry, configurationSource);
+
+				extension.registerBeansForRoot(beanDefinitionRegistry, configurationSource);
+
+				VisibleRepositoryBeanDefinitionBuilder builder = new VisibleRepositoryBeanDefinitionBuilder(beanDefinitionRegistry, extension, this.resourceLoader, this.environment);
+
+//				List<BeanComponentDefinition> definitions = new ArrayList<>();
+
+				for (RepositoryConfiguration<? extends RepositoryConfigurationSource> configuration : extension.getRepositoryConfigurations(configurationSource, resourceLoader, true)) {
+
+						BeanDefinitionBuilder definitionBuilder = builder.build(configuration);
+						extension.postProcess(definitionBuilder, configurationSource);
+						definitionBuilder.addPropertyValue("enableDefaultTransactions", false);
+
+						AbstractBeanDefinition beanDefinition = definitionBuilder.getBeanDefinition();
+						String beanName = configurationSource.generateBeanName(beanDefinition);
+
+						log
+							.debug("Spring Data {} - Registering repository: {} - Interface: {} - Factory: {}",
+								extension.getModuleName(), beanName, configuration.getRepositoryInterface(), configuration.getRepositoryFactoryBeanClassName());
+
+						beanDefinition.setAttribute("factoryBeanObjectType", configuration.getRepositoryInterface());
+
+						beanDefinitionRegistry.registerBeanDefinition(beanName, beanDefinition);
+//						definitions.add(new BeanComponentDefinition(beanDefinition, beanName));
+				}
+		}
+
 		@Override
 		public void registerBeanDefinitions(AnnotationMetadata importingClassMetadata, BeanDefinitionRegistry registry) {
 
@@ -296,40 +352,6 @@ class DynamicDataSourcePropertiesBindingPostProcessor implements
 				registerMetaData.forEach((prefix, pkg) -> this.registerForLabel(defaultListableBeanFactory, supplier, prefix, pkg.getName()));
 		}
 
-		private void registerJpaRepositories(Package pkg, String t, String e, AnnotationMetadata am, BeanDefinitionRegistry beanDefinitionRegistry) {
-
-				RepositoryConfigurationSourceSupport configurationSource = new DynamicRepositoryConfigurationSourceSupport(
-					this.environment, getClass().getClassLoader(), beanDefinitionRegistry, pkg, t, e);
-
-				RepositoryConfigurationExtension extension = new JpaRepositoryConfigExtension();
-				RepositoryConfigurationUtils.exposeRegistration(extension, beanDefinitionRegistry, configurationSource);
-
-				extension.registerBeansForRoot(beanDefinitionRegistry, configurationSource);
-
-				VisibleRepositoryBeanDefinitionBuilder builder = new VisibleRepositoryBeanDefinitionBuilder(beanDefinitionRegistry, extension, this.resourceLoader, this.environment);
-
-				List<BeanComponentDefinition> definitions = new ArrayList<>();
-
-				for (RepositoryConfiguration<? extends RepositoryConfigurationSource> configuration : extension.getRepositoryConfigurations(configurationSource, resourceLoader, true)) {
-
-						BeanDefinitionBuilder definitionBuilder = builder.build(configuration);
-						extension.postProcess(definitionBuilder, configurationSource);
-						definitionBuilder.addPropertyValue("enableDefaultTransactions", false);
-
-						AbstractBeanDefinition beanDefinition = definitionBuilder.getBeanDefinition();
-						String beanName = configurationSource.generateBeanName(beanDefinition);
-
-						log
-							.debug("Spring Data {} - Registering repository: {} - Interface: {} - Factory: {}",
-								extension.getModuleName(), beanName, configuration.getRepositoryInterface(), configuration.getRepositoryFactoryBeanClassName());
-
-						beanDefinition.setAttribute("factoryBeanObjectType", configuration.getRepositoryInterface());
-
-						beanDefinitionRegistry.registerBeanDefinition(beanName, beanDefinition);
-						definitions.add(new BeanComponentDefinition(beanDefinition, beanName));
-				}
-		}
-
 		private static LocalContainerEntityManagerFactoryBean entityManagerFactoryBean(
 			BeanFactory registry,
 			ResourceLoader resourceLoader,
@@ -369,31 +391,74 @@ class DynamicDataSourcePropertiesBindingPostProcessor implements
 				this.register(label, label + JdbcTemplate.class.getSimpleName(), JdbcTemplate.class, registry, new JdbcTemplateSupplier(registry, dataSourceBeanName));
 
 				// JPA EntityManagerFactory
-				Supplier<EntityManagerFactory> emfSupplier = () ->
-					entityManagerFactoryBean(
-						registry,
-						this.resourceLoader,
-						registry.getBean(dataSourceBeanName, DataSource.class),
-						label + "PU",
-						Package.getPackage(packageName))
-						.getObject();
+				EntityManagerFactorySupplier emfSupplier = new EntityManagerFactorySupplier(registry, this.resourceLoader, dataSourceBeanName, packageName);
+				Class<EntityManagerFactory> entityManagerFactoryClass = EntityManagerFactory.class;
+				String jpaEntityManagerFactoryBeanName = label + entityManagerFactoryClass.getSimpleName();
+				this.register(label, jpaEntityManagerFactoryBeanName, entityManagerFactoryClass, registry, emfSupplier);
 
-				String jpaEntityManagerFactoryBeanName = label + EntityManagerFactory.class.getSimpleName();
-				this.register(label, jpaEntityManagerFactoryBeanName, EntityManagerFactory.class, registry, emfSupplier);
+				// JPA TransactionManager
+				JpaTransactionManagerSupplier jpaTransactionManagerSupplier = new JpaTransactionManagerSupplier(registry, jpaEntityManagerFactoryBeanName);
+				String jpaTransactionManagerBeanName = label + JpaTransactionManager.class.getName();
+				this.register(label, jpaTransactionManagerBeanName, JpaTransactionManager.class, registry, jpaTransactionManagerSupplier);
 
+				// Spring Data JPA
+				this.registerJpaRepositories(packageName, jpaTransactionManagerBeanName, jpaEntityManagerFactoryBeanName, registry);
+		}
+
+		private static class JpaTransactionManagerSupplier implements Supplier<JpaTransactionManager> {
+
+				private final DefaultListableBeanFactory registry;
+				private final String jpaEntityManagerFactoryBeanName;
+
+				private JpaTransactionManagerSupplier(DefaultListableBeanFactory registry, String jpaEntityManagerFactoryBeanName) {
+						this.jpaEntityManagerFactoryBeanName = jpaEntityManagerFactoryBeanName;
+						this.registry = registry;
+				}
+
+				@Override
+				public JpaTransactionManager get() {
+						EntityManagerFactory emf = registry.getBean(jpaEntityManagerFactoryBeanName, EntityManagerFactory.class);
+						return new JpaTransactionManager(emf);
+				}
+		}
+
+		private static class EntityManagerFactorySupplier implements Supplier<EntityManagerFactory> {
+
+				private final DefaultListableBeanFactory registry;
+				private final ResourceLoader resourceLoader;
+				private final String dataSourceBeanName;
+				private final String packageName;
+
+				private EntityManagerFactorySupplier(DefaultListableBeanFactory registry, ResourceLoader resourceLoader, String dataSourceBeanName, String packageName) {
+						this.registry = registry;
+						this.resourceLoader = resourceLoader;
+						this.dataSourceBeanName = dataSourceBeanName;
+						this.packageName = packageName;
+				}
+
+				@Override
+				public EntityManagerFactory get() {
+						return entityManagerFactoryBean(
+							this.registry,
+							this.resourceLoader,
+							this.registry.getBean(dataSourceBeanName, DataSource.class),
+							this.dataSourceBeanName + "PU",
+							Package.getPackage(this.packageName))
+							.getObject();
+				}
 		}
 
 
 		private static class DynamicRepositoryConfigurationSourceSupport extends RepositoryConfigurationSourceSupport {
 
-				private final Package pkg;
+				private final String pkg;
 				private final String transactionManagerRef, entityManagerFactoryRef;
 
 				DynamicRepositoryConfigurationSourceSupport(
 					Environment environment,
 					ClassLoader classLoader,
 					BeanDefinitionRegistry registry,
-					Package pkg,
+					String pkg,
 					String transactionManagerBeanName,
 					String entityManagerFactoryBeanName) {
 						super(environment, classLoader, registry);
@@ -409,7 +474,7 @@ class DynamicDataSourcePropertiesBindingPostProcessor implements
 
 				@Override
 				public Streamable<String> getBasePackages() {
-						return Streamable.of(this.pkg.getName());
+						return Streamable.of(this.pkg);
 				}
 
 				@Override
@@ -456,5 +521,4 @@ class DynamicDataSourcePropertiesBindingPostProcessor implements
 						return false;
 				}
 		}
-
 }
