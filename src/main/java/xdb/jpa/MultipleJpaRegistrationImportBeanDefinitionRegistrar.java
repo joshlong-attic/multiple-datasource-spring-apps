@@ -1,7 +1,5 @@
 package xdb.jpa;
 
-import demo.blog.Post;
-import demo.crm.Order;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.PropertyEditorRegistry;
@@ -17,6 +15,7 @@ import org.springframework.boot.context.properties.source.ConfigurationPropertyS
 import org.springframework.context.*;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.ImportBeanDefinitionRegistrar;
+import org.springframework.core.annotation.AnnotationAttributes;
 import org.springframework.core.convert.ConversionService;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.PropertySources;
@@ -26,13 +25,14 @@ import org.springframework.data.jpa.repository.config.JpaRepositoryConfigExtensi
 import org.springframework.data.repository.config.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.orm.jpa.JpaTransactionManager;
+import org.springframework.util.Assert;
+import org.springframework.util.StringUtils;
 
 import javax.persistence.EntityManagerFactory;
 import javax.sql.DataSource;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 /**
 	* @author <a href="mailto:josh@joshlong.com">Josh Long</a>
@@ -43,26 +43,6 @@ class MultipleJpaRegistrationImportBeanDefinitionRegistrar implements ImportBean
 
 		private Environment environment;
 		private ResourceLoader resourceLoader;
-
-		private <T> void register(String label,
-																												String newBeanName,
-																												Class<T> clzz,
-																												BeanDefinitionRegistry beanDefinitionRegistry,
-																												Supplier<T> supplier) {
-
-				if (!beanDefinitionRegistry.containsBeanDefinition(newBeanName)) {
-						GenericBeanDefinition gdb = new GenericBeanDefinition();
-						gdb.setBeanClass(clzz);
-						gdb.setSynthetic(true);
-						gdb.setRole(BeanDefinition.ROLE_INFRASTRUCTURE);
-						gdb.setInstanceSupplier(supplier);
-						gdb.setLazyInit(true);
-						gdb.addQualifier(new AutowireCandidateQualifier(Qualifier.class, label));
-						beanDefinitionRegistry.registerBeanDefinition(newBeanName, gdb);
-						log.debug("adding qualifier '" + label + "' for " + clzz.getName() + " instance.");
-						log.debug("registered bean " + newBeanName + ".");
-				}
-		}
 
 		@Override
 		public void setEnvironment(Environment environment) {
@@ -82,6 +62,26 @@ class MultipleJpaRegistrationImportBeanDefinitionRegistrar implements ImportBean
 				return new Binder(from, new PropertySourcesPlaceholdersResolver(propertySources), bean, editorRegistryConsumer);
 		}
 
+		protected <T> void register(String label,
+																														String newBeanName,
+																														Class<T> clzz,
+																														BeanDefinitionRegistry beanDefinitionRegistry,
+																														Supplier<T> supplier) {
+
+				if (!beanDefinitionRegistry.containsBeanDefinition(newBeanName)) {
+						GenericBeanDefinition gdb = new GenericBeanDefinition();
+						gdb.setBeanClass(clzz);
+						gdb.setSynthetic(true);
+						gdb.setRole(BeanDefinition.ROLE_INFRASTRUCTURE);
+						gdb.setInstanceSupplier(supplier);
+						gdb.setLazyInit(true);
+						gdb.addQualifier(new AutowireCandidateQualifier(Qualifier.class, label));
+						beanDefinitionRegistry.registerBeanDefinition(newBeanName, gdb);
+						log.debug("adding qualifier '" + label + "' for " + clzz.getName() + " instance.");
+						log.debug("registered bean " + newBeanName + ".");
+				}
+		}
+
 		// yuck. i do this only to have a lazily resolved pointer to the ApplicationContext. There has to be an easier way.
 		private static class ApplicationContextHolder implements ApplicationContextAware {
 
@@ -93,7 +93,7 @@ class MultipleJpaRegistrationImportBeanDefinitionRegistrar implements ImportBean
 				}
 		}
 
-		private String registerApplicationContextHolderBean(BeanDefinitionRegistry registry) {
+		protected String registerApplicationContextHolderBean(BeanDefinitionRegistry registry) {
 
 				String name = MultipleJpaRegistrationImportBeanDefinitionRegistrar.ApplicationContextHolder.class.getName();
 				if (registry.containsBeanDefinition(name)) {
@@ -109,7 +109,7 @@ class MultipleJpaRegistrationImportBeanDefinitionRegistrar implements ImportBean
 				return name;
 		}
 
-		private void registerJpaRepositories(
+		protected void registerJpaRepositories(
 			String pkg, String transactionManagerBeanName, String entityManagerBeanName,
 			BeanDefinitionRegistry beanDefinitionRegistry) {
 
@@ -122,8 +122,6 @@ class MultipleJpaRegistrationImportBeanDefinitionRegistrar implements ImportBean
 				extension.registerBeansForRoot(beanDefinitionRegistry, configurationSource);
 
 				VisibleRepositoryBeanDefinitionBuilder builder = new VisibleRepositoryBeanDefinitionBuilder(beanDefinitionRegistry, extension, this.resourceLoader, this.environment);
-
-//				List<BeanComponentDefinition> definitions = new ArrayList<>();
 
 				for (RepositoryConfiguration<? extends RepositoryConfigurationSource> configuration : extension.getRepositoryConfigurations(configurationSource, resourceLoader, true)) {
 
@@ -139,17 +137,17 @@ class MultipleJpaRegistrationImportBeanDefinitionRegistrar implements ImportBean
 								extension.getModuleName(), beanName, configuration.getRepositoryInterface(), configuration.getRepositoryFactoryBeanClassName());
 
 						beanDefinition.setAttribute("factoryBeanObjectType", configuration.getRepositoryInterface());
-
 						beanDefinitionRegistry.registerBeanDefinition(beanName, beanDefinition);
-//						definitions.add(new BeanComponentDefinition(beanDefinition, beanName));
 				}
 		}
 
 		@Override
-		public void registerBeanDefinitions(AnnotationMetadata importingClassMetadata, BeanDefinitionRegistry registry) {
+		public void registerBeanDefinitions(AnnotationMetadata importingClassAnnotationMetadata, BeanDefinitionRegistry registry) {
 
 				DefaultListableBeanFactory defaultListableBeanFactory = DefaultListableBeanFactory.class.cast(registry);
-				String achBeanName = this.registerApplicationContextHolderBean(defaultListableBeanFactory);
+
+				String applicationContextHolderBeanName = this.registerApplicationContextHolderBean(defaultListableBeanFactory);
+
 				Supplier<Binder> supplier = new Supplier<Binder>() {
 
 						private Binder binder;
@@ -157,7 +155,8 @@ class MultipleJpaRegistrationImportBeanDefinitionRegistrar implements ImportBean
 						@Override
 						public Binder get() {
 								if (null == this.binder) {
-										MultipleJpaRegistrationImportBeanDefinitionRegistrar.ApplicationContextHolder applicationContextHolder = defaultListableBeanFactory.getBean(achBeanName, MultipleJpaRegistrationImportBeanDefinitionRegistrar.ApplicationContextHolder.class);
+										ApplicationContextHolder applicationContextHolder = defaultListableBeanFactory
+											.getBean(applicationContextHolderBeanName, ApplicationContextHolder.class);
 										ApplicationContext applicationContext = applicationContextHolder.applicationContext;
 										this.binder = buildBinderFor(applicationContext);
 								}
@@ -165,33 +164,38 @@ class MultipleJpaRegistrationImportBeanDefinitionRegistrar implements ImportBean
 						}
 				};
 
-				/*importingClassMetadata
-					.getAllAnnotationAttributes(EnableMultipleJpaRegistrations.class.getName())
+				String enableMultipleJpaRegistrationsAnnotationName = EnableMultipleJpaRegistrations.class.getName();
+
+				importingClassAnnotationMetadata
+					.getAllAnnotationAttributes(enableMultipleJpaRegistrationsAnnotationName)
 					.get("value")
 					.stream()
-					.map(o -> (String[]) o)
-					.flatMap(Stream::of)*/
-//					.forEach(p -> registerForLabel(defaultListableBeanFactory, supplier, p, Package.getPackage()));
+					.map(o -> (AnnotationAttributes[]) o)
+					.flatMap(Stream::of)
+					.forEach(jpaRegistration -> {
 
-				// todo factor this out into a nested annotation set
-				/*
-				 @EnableMultipleJpaRegistrations (
-				 	{
-				 		 @MDJ("crm", pkg.for.crm.Order.class)},
-				 	 	@MDJ("blog", pkg.for.blog.Post.class)
-						}
-					)
-				 */
-				Map<String, Package> registerMetaData = new HashMap<>();
-				registerMetaData.put("blog", Post.class.getPackage());
-				registerMetaData.put("crm", Order.class.getPackage());
-				registerMetaData.forEach((prefix, pkg) -> this.registerForLabel(defaultListableBeanFactory, supplier, prefix, pkg.getName()));
+							String prefix = jpaRegistration.getString("prefix");
+							Class<?> rootPackageClass = jpaRegistration.getClass("rootPackageClass");
+							String rootPackage = jpaRegistration.getString("rootPackage");
+
+							String resolvedPackage = (StringUtils.hasText(rootPackage)) ? rootPackage : rootPackageClass.getPackage().getName();
+
+							Assert.hasText(resolvedPackage, "you must specify a root package when using " + enableMultipleJpaRegistrationsAnnotationName);
+							this
+								.registerJpaRegistrationsForPrefixAndPackage(
+									defaultListableBeanFactory,
+									supplier,
+									prefix,
+									resolvedPackage
+								);
+					});
 		}
 
-		private void registerForLabel(DefaultListableBeanFactory registry,
-																																Supplier<Binder> binderSupplier,
-																																String label,
-																																String packageName) {
+		protected void registerJpaRegistrationsForPrefixAndPackage(
+			DefaultListableBeanFactory registry,
+			Supplier<Binder> binderSupplier,
+			String label,
+			String packageName) {
 
 				// DataSourceRegistration
 				BoundDataSourceRegistrationSupplier dsrSupplier = new BoundDataSourceRegistrationSupplier(binderSupplier, label);

@@ -16,6 +16,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.orm.jpa.JpaTransactionManager;
 import xdb.jpa.DataSourceRegistration;
 import xdb.jpa.EnableMultipleJpaRegistrations;
+import xdb.jpa.JpaRegistration;
 
 import javax.persistence.EntityManagerFactory;
 import javax.sql.DataSource;
@@ -24,7 +25,10 @@ import javax.sql.DataSource;
 	* @author <a href="mailto:josh@joshlong.com">Josh Long</a>
 	*/
 @SpringBootApplication
-@EnableMultipleJpaRegistrations({"blog", "crm"})
+@EnableMultipleJpaRegistrations({
+	@JpaRegistration(prefix = "crm", rootPackageClass = Order.class),
+	@JpaRegistration(prefix = "blog", rootPackageClass = Post.class),
+})
 @Log4j2
 public class DemoApplication {
 
