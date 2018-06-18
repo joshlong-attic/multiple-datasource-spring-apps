@@ -70,19 +70,21 @@ public class MDJ {
 		ApplicationRunner runner(@Crm DataSourceRegistration crmDSR, @Crm DataSource crmDS, @Crm JdbcTemplate crmJT, @Crm EntityManagerFactory crmEMF,
 																											@Blog DataSourceRegistration blogDSR, @Blog DataSource blogDS, @Blog JdbcTemplate blogJT, @Blog EntityManagerFactory blogEMF) {
 				return args -> {
+
 						log("CRM", crmDSR, crmDS, crmJT, crmEMF);
 						crmEMF
 							.createEntityManager()
-							.createQuery("select p from " + Order.class.getName() + " p", Order.class)
+							.createQuery("select o from " + Order.class.getName() + " o", Order.class)
 							.getResultList()
 							.forEach(p -> log.info("order: " + ToStringBuilder.reflectionToString(p)));
 
 						log("BLOG", blogDSR, blogDS, blogJT, blogEMF);
 						blogEMF
 							.createEntityManager()
-							.createQuery("select b from " + Post.class.getName() + " b ", Post.class)
+							.createQuery("select b from " + Post.class.getName() + " b", Post.class)
 							.getResultList()
 							.forEach(p -> log.info("post: " + ToStringBuilder.reflectionToString(p)));
+
 				};
 		}
 
